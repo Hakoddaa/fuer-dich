@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Für dich</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/*
+VOICE: tender, quiet, a little nerdy
+IDEA: a terminal that prints a bouquet of flowers out of characters
+PICTURE: the bouquet itself, growing on a dark empty screen
+COLOUR and TYPE: near-black night ground, flower colours as the only colour; JetBrains Mono
+LAYOUT: one screen, bouquet centred, one short line at the bottom
+*/
+:root{color-scheme:dark;--bg:#07060b;--ink:#efe9ff}
+:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "JetBrains Mono",ui-monospace,Menlo,monospace;overflow:hidden;-webkit-tap-highlight-color:transparent;cursor:pointer}
+canvas{position:fixed;inset:0;width:100%;height:100%;filter:drop-shadow(0 0 5px rgba(255,180,220,.28))}
+#term{position:fixed;top:max(18px,env(safe-area-inset-top));left:max(18px,env(safe-area-inset-left));font-size:14px;color:#8f86a8;white-space:pre}
+#term b{color:#4cd964;font-weight:500}
+.cur{display:inline-block;width:.6em;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+#msg{position:fixed;left:0;right:0;bottom:max(7vh,calc(env(safe-area-inset-bottom) + 24px));text-align:center;font-size:clamp(22px,6vw,34px);font-weight:700;color:#ffd6ea;opacity:0;transform:translateY(8px);transition:opacity 1.4s ease,transform 1.4s ease;text-shadow:0 0 18px rgba(255,120,180,.45)}
+#msg.on{opacity:1;transform:none}
+#hint{position:fixed;left:0;right:0;bottom:max(14px,env(safe-area-inset-bottom));text-align:center;font-size:13px;color:#5d5673;opacity:0;transition:opacity 1s ease 1.5s}
+#hint.on{opacity:1}
+@media (prefers-reduced-motion:reduce){#msg,#hint{transition:none}.cur{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="term"></div>
+<div id="msg">Für dich ♥</div>
+<div id="hint">Antippen zum Nochmal-Abspielen</div>
+<script>
+{
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const term=document.getElementById('term'),msg=document.getElementById('msg'),hint=document.getElementById('hint');
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const AX=0.62,S=1.5,BW=40,BH=57,CMD='python3 strauss.py',T0=1300;
+const C={red:'#ff4d5e',pink:'#ff8fc7',yellow:'#ffd84d',white:'#f4f1ff',purple:'#b48cff',orange:'#ff9a3c',rose:'#ff6fa8',stem:'#4cd964',leaf:'#2fbf71',paper:'#cdb4ff',ribbon:'#ff5c8a'};
+const cells=new Map();
+const putC=(c,r,ch,col,t,a=1)=>{if(ch!==' ')cells.set(c+','+r,{c,r,ch,col,t,a})};
+const put=(x,y,ch,col,t,a)=>putC(Math.round(x*S/AX),Math.round(y*S),ch,col,t,a);
+
+const T={x:20,y:37};
+const flowers=[
+ [20,10,5,C.red,5],[11,14,4.2,C.yellow,8],[29,13,4.5,C.pink,6],
+ [13,5,3.4,C.white,7],[27,4.5,3.4,C.purple,5],[6,22,3.7,C.white,10],
+ [34,22,3.7,C.purple,6],[15,22.5,4,C.orange,6],[25.5,21.5,4.2,C.rose,8]
+];
+
+// stems
+flowers.forEach(([hx,hy],i)=>{
+ const qx=T.x+(hx-T.x)*0.25,qy=(T.y+hy)/2+2;
+ for(let s=0;s<=1;s+=0.004){
+  const u=1-s,x=u*u*T.x+2*u*s*qx+s*s*hx,y=u*u*T.y+2*u*s*qy+s*s*hy;
+  const dx=2*u*(qx-T.x)+2*s*(hx-qx),dy=2*u*(qy-T.y)+2*s*(hy-qy);
+  const ch=Math.abs(dx)<0.4*Math.abs(dy)?'|':(dx>0?'/':'\\');
+  put(x,y,ch,C.stem,1000+s*1500+i*50);
+ }
+});
+// leaves
+[1,2,5,6,7].forEach(i=>{
+ const [hx,hy]=flowers[i],qx=T.x+(hx-T.x)*0.25,qy=(T.y+hy)/2+2,s=0.5,u=0.5;
+ const x=u*u*T.x+2*u*s*qx+s*s*hx,y=u*u*T.y+2*u*s*qy+s*s*hy,side=Math.sign(hx-T.x)||1;
+ const lx=x+side*2.3,ly=y+0.2;
+ for(let c=Math.round((lx-2.6)*S/AX);c<=Math.round((lx+2.6)*S/AX);c++)for(let r=Math.round((ly-1.2)*S);r<=Math.round((ly+1.2)*S);r++){
+  const ex=(c*AX/S-lx)/2.4,ey=(r/S-ly)/1.1;
+  if(ex*ex+ey*ey<=1)putC(c,r,ey<0?'~':'-',C.leaf,1800+i*50+Math.abs(ex)*300);
+ }
+});
+// paper cone
+for(let r=Math.round(35*S);r<=Math.round(BH*S);r++){
+ const f=(r/S-35)/(BH-35),half=9.5*(1-f)+0.7;
+ const cL=Math.round((20-half)*S/AX),cR=Math.round((20+half)*S/AX);
+ for(let c=cL;c<=cR;c++){
+  const ch=c===cL?'\\':c===cR?'/':((c+r)%4===0?'/':((c-r+400)%4===0?'\\':'.'));
+  putC(c,r,ch,C.paper,(1-f)*900,c===cL||c===cR?0.95:0.5);
+ }
+}
+// ribbon
+const cx=Math.round(20*S/AX),ry=Math.round(36*S);
+'<<<=@=>>>'.split('').forEach((ch,k)=>putC(cx-4+k,ry,ch,C.ribbon,2300));
+[[cx-2,ry+1,'/'],[cx+2,ry+1,'\\'],[cx-3,ry+2,'/'],[cx+3,ry+2,'\\'],[cx-4,ry+3,'/'],[cx+4,ry+3,'\\']].forEach(([c,r,ch])=>putC(c,r,ch,C.ribbon,2450));
+// flowers
+flowers.forEach(([hx,hy,R,col,k],i)=>{
+ const tf=2500+i*170;
+ for(let c=Math.round((hx-R)*S/AX);c<=Math.round((hx+R)*S/AX);c++)for(let r=Math.floor((hy-R)*S);r<=Math.ceil((hy+R)*S);r++){
+  const dx=c*AX/S-hx,dy=r/S-hy,d=Math.hypot(dx,dy),th=Math.atan2(dy,dx);
+  const rr=R*(0.5+0.5*Math.abs(Math.cos(k*th/2)));
+  if(d>rr)continue;
+  const q=d/rr;
+  if(d<R*0.3)putC(c,r,'@',col===C.yellow?'#c97b2a':C.yellow,tf+q*200);
+  else putC(c,r,q<0.8?'*':'o',col,tf+q*700,q<0.8?1:0.8);
+ }
+});
+const list=[...cells.values()].sort((a,b)=>a.t-b.t);
+const END=Math.max(...list.map(e=>e.t))+300;
+
+let W=0,H=0,fs=12,ox=0,oy=0,start=0,raf=0,dpr=1;
+const layout=()=>{
+ dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;
+ cv.width=W*dpr;cv.height=H*dpr;
+ const cols=Math.round(BW*S/AX)+2,rows=Math.round(BH*S)+2;
+ fs=Math.min((W*0.9)/(cols*AX),(H*0.72)/rows);
+ ox=(W-cols*AX*fs)/2+AX*fs;oy=Math.max(H*0.08,(H*0.86-rows*fs)/2);
+};
+const draw=el=>{
+ ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+ ctx.font='700 '+fs.toFixed(2)+'px "JetBrains Mono",ui-monospace,Menlo,monospace';
+ ctx.textAlign='center';ctx.textBaseline='middle';
+ for(const e of list){
+  if(e.t>el)break;
+  ctx.globalAlpha=e.a*Math.min(1,(el-e.t)/260);
+  ctx.fillStyle=e.col;
+  ctx.fillText(e.ch,ox+e.c*AX*fs,oy+e.r*fs);
+ }
+ ctx.globalAlpha=1;
+};
+const typeCmd=el=>{
+ const n=Math.max(0,Math.min(CMD.length,Math.floor((el-300)/45)));
+ term.innerHTML='<b>~</b> $ '+CMD.slice(0,n)+'<span class="cur">_</span>';
+};
+const frame=now=>{
+ const el=now-start;typeCmd(el);
+ const be=el-T0;draw(be);
+ if(be>END){msg.classList.add('on');hint.classList.add('on');return}
+ raf=requestAnimationFrame(frame);
+};
+const play=()=>{
+ cancelAnimationFrame(raf);msg.classList.remove('on');hint.classList.remove('on');
+ if(reduce){typeCmd(1e9);draw(1e9);msg.classList.add('on');hint.classList.add('on');return}
+ start=performance.now();raf=requestAnimationFrame(frame);
+};
+addEventListener('resize',()=>{layout();if(msg.classList.contains('on'))draw(1e9)});
+document.body.addEventListener('click',play);
+layout();
+const go=()=>{layout();play()};
+(document.fonts&&document.fonts.load?Promise.race([document.fonts.load('700 16px "JetBrains Mono"'),new Promise(r=>setTimeout(r,1500))]):Promise.resolve()).then(go,go);
+}
+</script>
+</body>
+</html>
